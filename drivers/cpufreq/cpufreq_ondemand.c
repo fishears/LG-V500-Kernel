@@ -34,6 +34,7 @@
 #define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(10)
 #define DEF_FREQUENCY_UP_THRESHOLD		(80)
 #define DEF_SAMPLING_DOWN_FACTOR		(1)
+#define DEF_GRAD_UP_THRESHOLD			(50)
 #define MAX_SAMPLING_DOWN_FACTOR		(100000)
 #define MICRO_FREQUENCY_DOWN_DIFFERENTIAL	(3)
 #define MICRO_FREQUENCY_UP_THRESHOLD		(95)
@@ -103,6 +104,7 @@ struct cpu_dbs_info_s {
 	unsigned int rate_mult;
 	int cpu;
 	unsigned int sample_type:1;
+	unsigned int prev_load_freq;
 	/*
 	 * percpu mutex that serializes governor limit change with
 	 * do_dbs_timer invocation. We do not want do_dbs_timer to run
@@ -130,6 +132,7 @@ static struct dbs_tuners {
 	unsigned int sampling_rate;
 	unsigned int up_threshold;
 	unsigned int adj_up_threshold;
+	unsigned int grad_up_threshold;
 	unsigned int ignore_nice;
 	unsigned int sampling_down_factor;
 	int          powersave_bias;
@@ -143,6 +146,7 @@ static struct dbs_tuners {
 	unsigned int lpm_state;
 	unsigned int optimal_lpm_freq; /* in kHz */
 #endif /* defined(CONFIG_LG_GRID_GOVERNOR) */
+	unsigned int early_demand;
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
@@ -161,6 +165,8 @@ static struct dbs_tuners {
 	.optimal_lpm_freq = DEF_OLPM_FREQ,
 	.lpm_state=0,
 #endif /* defined(CONFIG_LG_GRID_GOVERNOR) */
+	.grad_up_threshold = DEF_GRAD_UP_THRESHOLD,
+	.early_demand = 0,
 };
 
 #if defined (CONFIG_MACH_APQ8064_OMEGA) || defined (CONFIG_MACH_APQ8064_OMEGAR)
@@ -315,6 +321,8 @@ show_one(io_is_busy, io_is_busy);
 show_one(up_threshold, up_threshold);
 show_one(sampling_down_factor, sampling_down_factor);
 show_one(ignore_nice_load, ignore_nice);
+show_one(grad_up_threshold, grad_up_threshold);
+show_one(early_demand, early_demand);
 
 #if defined(CONFIG_LG_GRID_GOVERNOR)
 show_one(middle_grid_step, middle_grid_step);
@@ -702,12 +710,44 @@ skip_this_cpu_bypass:
 	return count;
 }
 
+static ssize_t store_grad_up_threshold(struct kobject *a, struct attribute *b,
+					const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1 || input > MAX_FREQUENCY_UP_THRESHOLD ||
+		input < MIN_FREQUENCY_UP_THRESHOLD) {
+		return -EINVAL;
+	}
+
+	dbs_tuners_ins.grad_up_threshold = input;
+	return count;
+}
+
+static ssize_t store_early_demand(struct kobject *a, struct attribute *b,
+				const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+
+	dbs_tuners_ins.early_demand = !!input;
+	return count;
+}
+
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
 define_one_global_rw(sampling_down_factor);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
+define_one_global_rw(grad_up_threshold);
+define_one_global_rw(early_demand);
 
 #if defined(CONFIG_LG_GRID_GOVERNOR)
 define_one_global_rw(optimal_max_freq);
@@ -736,6 +776,8 @@ static struct attribute *dbs_attributes[] = {
 	&lpm_state.attr,
 	&optimal_lpm_freq.attr,
 #endif /* defined(CONFIG_LG_GRID_GOVERNOR) */
+	&grad_up_threshold.attr,
+	&early_demand.attr,
 	NULL
 };
 
@@ -764,6 +806,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	unsigned int max_load_freq;
 	/* Current load across this CPU */
 	unsigned int cur_load = 0;
+	int boost_freq = 0;
 
 	struct cpufreq_policy *policy;
 	unsigned int j;
@@ -860,8 +903,24 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		return;
 	}
 #endif
+
+	/*
+	 * Calculate the gradient of load_freq. If it is too steep we assume
+	 * that the load will go over up_threshold in next iteration(s) and
+	 * we increase the frequency immediately
+	 */
+	if (dbs_tuners_ins.early_demand) {
+		if (max_load_freq > this_dbs_info->prev_load_freq &&
+		   (max_load_freq - this_dbs_info->prev_load_freq >
+		    dbs_tuners_ins.grad_up_threshold * policy->cur))
+			boost_freq = 1;
+
+		this_dbs_info->prev_load_freq = max_load_freq;
+	}
+
 	/* Check for frequency increase */
-	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
+	if (boost_freq ||
+	    max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
 #if defined(CONFIG_LG_GRID_GOVERNOR)
 		unsigned int freq_target, freq_div;
 		freq_target=0; freq_div=0;
@@ -1156,6 +1215,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		}
 		this_dbs_info->cpu = cpu;
 		this_dbs_info->rate_mult = 1;
+		this_dbs_info->prev_load_freq = 0;
 		ondemand_powersave_bias_init_cpu(cpu);
 		/*
 		 * Start the timerschedule work, when this governor
