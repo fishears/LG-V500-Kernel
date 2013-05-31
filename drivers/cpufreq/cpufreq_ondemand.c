@@ -629,10 +629,7 @@ static ssize_t store_powersave_bias(struct kobject *a, struct attribute *b,
 				POWERSAVE_BIAS_MINLEVEL));
 
 	dbs_tuners_ins.powersave_bias = input;
-
-	mutex_lock(&dbs_mutex);
 	get_online_cpus();
-
 	if (!bypass) {
 		if (reenable_timer) {
 			/* reinstate dbs timer */
@@ -685,9 +682,9 @@ skip_this_cpu:
 
 			if (dbs_info->cur_policy) {
 				/* cpu using ondemand, cancel dbs timer */
+				mutex_lock(&dbs_info->timer_mutex);
 				dbs_timer_exit(dbs_info);
 
-				mutex_lock(&dbs_info->timer_mutex);
 				ondemand_powersave_bias_setspeed(
 					dbs_info->cur_policy,
 					NULL,
@@ -699,9 +696,7 @@ skip_this_cpu_bypass:
 			unlock_policy_rwsem_write(cpu);
 		}
 	}
-
 	put_online_cpus();
-	mutex_unlock(&dbs_mutex);
 
 	return count;
 }
