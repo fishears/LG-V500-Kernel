@@ -38,6 +38,8 @@
 #define MICRO_FREQUENCY_MIN_SAMPLE_RATE		(10000)
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
+#define TOUCH_LOAD				(65)
+#define TOUCH_DELAY				(2000)
 
 #if defined(CONFIG_LG_GRID_GOVERNOR)
 #define DEF_MIDDLE_GRID_STEP           		(14)
@@ -86,6 +88,8 @@ struct cpufreq_governor cpufreq_gov_ondemand = {
 /* Sampling types */
 enum {DBS_NORMAL_SAMPLE, DBS_SUB_SAMPLE};
 
+struct timer_list input_timer;
+
 struct cpu_dbs_info_s {
 	cputime64_t prev_cpu_idle;
 	cputime64_t prev_cpu_iowait;
@@ -119,10 +123,6 @@ static unsigned int dbs_enable;	/* number of CPUs using this policy */
  */
 static DEFINE_MUTEX(dbs_mutex);
 
-static struct workqueue_struct *input_wq;
-
-static DEFINE_PER_CPU(struct work_struct, dbs_refresh_work);
-
 static struct dbs_tuners {
 	unsigned int sampling_rate;
 	unsigned int up_threshold;
@@ -139,7 +139,8 @@ static struct dbs_tuners {
 	unsigned int lpm_state;
 	unsigned int optimal_lpm_freq; /* in kHz */
 #endif /* defined(CONFIG_LG_GRID_GOVERNOR) */
-	unsigned int early_demand;
+	unsigned long touch_delay;
+	unsigned int touch_load;
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
@@ -158,8 +159,8 @@ static struct dbs_tuners {
 	.optimal_lpm_freq = DEF_OLPM_FREQ,
 	.lpm_state=0,
 #endif /* defined(CONFIG_LG_GRID_GOVERNOR) */
-	.grad_up_threshold = DEF_GRAD_UP_THRESHOLD,
-	.early_demand = 0,
+	.touch_delay = TOUCH_DELAY,
+	.touch_load = TOUCH_LOAD,
 };
 
 #if defined (CONFIG_MACH_APQ8064_OMEGA) || defined (CONFIG_MACH_APQ8064_OMEGAR)
@@ -755,8 +756,6 @@ static void dbs_freq_increase(struct cpufreq_policy *p, unsigned int freq)
 
 static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
-	/* Extrapolated load of this CPU */
-	unsigned int load_at_max_freq = 0;
 	unsigned int max_load;
 	/* Current load across this CPU */
 	unsigned int cur_load = 0;
@@ -828,10 +827,6 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		if (cur_load > max_load)
 			max_load = cur_load;
 	}
-	/* calculate the scaled load across CPU */
-	load_at_max_freq = (cur_load * policy->cur)/policy->cpuinfo.max_freq;
-
-	cpufreq_notify_utilization(policy, load_at_max_freq);
 
 #if defined (CONFIG_MACH_APQ8064_OMEGA) || defined (CONFIG_MACH_APQ8064_OMEGAR)
 	if (boost_freq == 2) {
@@ -841,21 +836,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		return;
 	}
 #endif
-
-	/*
-	 * Calculate the gradient of load. If it is too steep we assume
-	 * that the load will go over up_threshold in next iteration(s) and
-	 * we increase the frequency immediately
-	 */
-	if (dbs_tuners_ins.early_demand) {
-		if (max_load > this_dbs_info->prev_load &&
-		   (max_load - this_dbs_info->prev_load >
-		    dbs_tuners_ins.grad_up_threshold * policy->cur))
-			boost_freq = 1;
-
-		this_dbs_info->prev_load = max_load;
-	}
-
+	if (max_load < dbs_tuners_ins.touch_load && max_load > 15)
+		max_load = dbs_tuners_ins.touch_load;
+	
 	/* Check for frequency increase */
 	if (boost_freq || cur_load > dbs_tuners_ins.up_threshold) {
 #if defined(CONFIG_LG_GRID_GOVERNOR)
@@ -1000,50 +983,15 @@ static int should_io_be_busy(void)
 	return 0;
 }
 
-static void dbs_refresh_callback(struct work_struct *unused)
+static void input_timout(unsigned long timeout)
 {
-	struct cpufreq_policy *policy;
-	struct cpu_dbs_info_s *this_dbs_info;
-	unsigned int cpu = smp_processor_id();
-
-	if (lock_policy_rwsem_write(cpu) < 0)
-		return;
-
-	this_dbs_info = &per_cpu(od_cpu_dbs_info, cpu);
-	policy = this_dbs_info->cur_policy;
-	if (!policy) {
-		/* CPU not using ondemand governor */
-		unlock_policy_rwsem_write(cpu);
-		return;
-	}
-
-	if (policy->cur < policy->max) {
-		/*
-		 * Arch specific cpufreq driver may fail.
-		 * Don't update governor frequency upon failure.
-		 */
-		if (__cpufreq_driver_target(policy, policy->max,
-					CPUFREQ_RELATION_L) >= 0)
-			policy->cur = policy->max;
-
-		this_dbs_info->prev_cpu_idle = get_cpu_idle_time(cpu,
-					&this_dbs_info->prev_cpu_wall,
-					dbs_tuners_ins.io_is_busy);
-	}
-	unlock_policy_rwsem_write(cpu);
+	dbs_tuners_ins.touch_load = 0;
 }
 
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
-	int i;
-
-	if ((dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MAXLEVEL) ||
-		(dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MINLEVEL)) {
-		/* nothing to do */
-		return;
-	}
-
+	unsigned long delay = msecs_to_jiffies(dbs_tuners_ins.touch_delay);
 #if defined (CONFIG_MACH_APQ8064_OMEGA) || defined (CONFIG_MACH_APQ8064_OMEGAR)
 	if (boost_freq == 1) {
 		if (!strcmp((char*)(handle->dev->name), "qpnp_pon")){
@@ -1052,9 +1000,13 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 			printk(KERN_ERR "ws->name=%s, boost_Freq=%d\n", handle->dev->name, boost_freq);
 		}
 	}
-#endif
-	for_each_online_cpu(i) {
-		queue_work_on(i, input_wq, &per_cpu(dbs_refresh_work, i));
+#endif	
+	if (dbs_tuners_ins.touch_load == 0) {
+		dbs_tuners_ins.touch_load = TOUCH_LOAD;
+		input_timer.expires = jiffies + delay;
+		add_timer(&input_timer);
+	} else {
+		mod_timer(&input_timer, jiffies + delay);
 	}
 }
 
@@ -1245,17 +1197,13 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
-	input_wq = create_workqueue("iewq");
-	if (!input_wq) {
-		printk(KERN_ERR "Failed to create iewq workqueue\n");
-		return -EFAULT;
-	}
+	init_timer(&input_timer);
+	input_timer.function = input_timout;
+	
 	for_each_possible_cpu(i) {
 		struct cpu_dbs_info_s *this_dbs_info =
 			&per_cpu(od_cpu_dbs_info, i);
 		mutex_init(&this_dbs_info->timer_mutex);
-		INIT_WORK(&per_cpu(dbs_refresh_work, i), dbs_refresh_callback);
-		INIT_DELAYED_WORK_DEFERRABLE(&this_dbs_info->work, do_dbs_timer);
 	}
 
 	return cpufreq_register_governor(&cpufreq_gov_ondemand);
@@ -1263,15 +1211,8 @@ static int __init cpufreq_gov_dbs_init(void)
 
 static void __exit cpufreq_gov_dbs_exit(void)
 {
-	unsigned int i;
-
+	del_timer_sync(&input_timer);
 	cpufreq_unregister_governor(&cpufreq_gov_ondemand);
-	for_each_possible_cpu(i) {
-		struct cpu_dbs_info_s *this_dbs_info =
-			&per_cpu(od_cpu_dbs_info, i);
-		mutex_destroy(&this_dbs_info->timer_mutex);
-	}
-	destroy_workqueue(input_wq);
 }
 
 
