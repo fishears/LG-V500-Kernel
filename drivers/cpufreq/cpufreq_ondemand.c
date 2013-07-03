@@ -39,8 +39,8 @@
 #define MIN_FREQUENCY_UP_THRESHOLD		(11)
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
 #define TOUCH_LOAD				(65)
-#define TOUCH_LOAD_THRESHOLD			(10)
-#define TOUCH_LOAD_DURATION				(1500)
+#define TOUCH_LOAD_THRESHOLD			(12)
+#define TOUCH_LOAD_DURATION			(1300)
 
 #if defined(CONFIG_LG_GRID_GOVERNOR)
 #define DEF_MIDDLE_GRID_STEP           		(14)
@@ -166,7 +166,7 @@ static struct dbs_tuners {
 extern int boost_freq;
 #endif
 struct timer_list input_timer;
-static bool touch = false;
+static bool touch;
 
 static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 {
@@ -1254,9 +1254,10 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
+	touch = false;
 	init_timer(&input_timer);
 	input_timer.function = input_timeout;
-	
+
 	for_each_possible_cpu(i) {
 		struct cpu_dbs_info_s *this_dbs_info =
 			&per_cpu(od_cpu_dbs_info, i);
