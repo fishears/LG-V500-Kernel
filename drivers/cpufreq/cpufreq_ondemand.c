@@ -166,6 +166,7 @@ static struct dbs_tuners {
 extern int boost_freq;
 #endif
 struct timer_list input_timer;
+static unsigned timer_delay;
 static bool touch;
 
 static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
@@ -744,6 +745,7 @@ static ssize_t store_touch_load_duration(struct kobject *a, struct attribute *b,
 		return -EINVAL;
 
 	dbs_tuners_ins.touch_load_duration = input;
+	timer_delay = msecs_to_jiffies(dbs_tuners_ins.touch_load_duration);
 	return count;
 }
 
@@ -1048,8 +1050,6 @@ static void input_timeout(unsigned long timeout)
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
-	unsigned long delay =
-			msecs_to_jiffies(dbs_tuners_ins.touch_load_duration);
 #if defined (CONFIG_MACH_APQ8064_OMEGA) || defined (CONFIG_MACH_APQ8064_OMEGAR)
 	if (boost_freq == 1) {
 		if (!strcmp((char*)(handle->dev->name), "qpnp_pon")){
@@ -1061,10 +1061,10 @@ static void dbs_input_event(struct input_handle *handle, unsigned int type,
 #endif		
 	if (!touch) {
 		touch = true;
-		input_timer.expires = jiffies + delay; /* change this line */
+		input_timer.expires = jiffies + timer_delay;
 		add_timer(&input_timer);
 	} else
-		mod_timer(&input_timer, jiffies + delay);
+		mod_timer(&input_timer, jiffies + timer_delay);
 }
 
 static int dbs_input_connect(struct input_handler *handler,
@@ -1255,6 +1255,7 @@ static int __init cpufreq_gov_dbs_init(void)
 	}
 
 	touch = false;
+	timer_delay = msecs_to_jiffies(dbs_tuners_ins.touch_load_duration);
 	init_timer(&input_timer);
 	input_timer.function = input_timeout;
 
