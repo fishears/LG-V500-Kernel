@@ -40,7 +40,7 @@
 #define MAX_FREQUENCY_UP_THRESHOLD		(100)
 #define TOUCH_LOAD				(75)
 #define TOUCH_LOAD_THRESHOLD			(10)
-#define TOUCH_LOAD_DURATION			(1300)
+#define TOUCH_LOAD_DURATION			(1100)
 
 #if defined(CONFIG_LG_GRID_GOVERNOR)
 #define DEF_MIDDLE_GRID_STEP           		(14)
