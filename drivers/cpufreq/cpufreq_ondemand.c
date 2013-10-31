@@ -941,7 +941,6 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 #else
 		dbs_freq_increase(policy, policy->max);
 #endif /* defined(CONFIG_LG_GRID_GOVERNOR) */
-		return;
 	} else {
 		/* Calculate the next frequency proportional to load */
 		unsigned int freq_next;
