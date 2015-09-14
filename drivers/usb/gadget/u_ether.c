@@ -19,10 +19,6 @@
 #include <linux/ctype.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
-#ifdef CONFIG_USB_G_LGE_ANDROID
-#include <linux/notifier.h>
-#include <linux/cpufreq.h>
-#endif
 
 #include "u_ether.h"
 
@@ -51,18 +47,6 @@
 #define UETH__VERSION	"29-May-2008"
 
 static struct workqueue_struct	*uether_wq;
-#ifdef CONFIG_USB_G_LGE_ANDROID
-static unsigned int min_cpu_freq;
-module_param(min_cpu_freq, uint, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(min_cpu_freq,
-	"to set minimum cpu frquency to when ethernet ifc is active");
-
-enum ifc_state {
-	ETH_UNDEFINED,
-	ETH_STOP,
-	ETH_START,
-};
-#endif
 
 struct eth_dev {
 	/* lock is held while accessing port_usb
@@ -99,11 +83,6 @@ struct eth_dev {
 
 	bool			zlp;
 	u8			host_mac[ETH_ALEN];
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	enum ifc_state		state;
-	struct notifier_block	cpufreq_notifier;
-	struct work_struct	cpu_policy_w;
-#endif
 };
 
 /*-------------------------------------------------------------------------*/
@@ -606,7 +585,7 @@ static inline int is_promisc(u16 cdc_filter)
 	return cdc_filter & USB_CDC_PACKET_TYPE_PROMISCUOUS;
 }
 
-static int alloc_tx_buffer(struct eth_dev *dev)
+static void alloc_tx_buffer(struct eth_dev *dev)
 {
 	struct list_head	*act;
 	struct usb_request	*req;
@@ -623,19 +602,7 @@ static int alloc_tx_buffer(struct eth_dev *dev)
 		if (!req->buf)
 			req->buf = kmalloc(dev->tx_req_bufsize,
 						GFP_ATOMIC);
-			if (!req->buf)
-				goto free_buf;
 	}
-	return 0;
-
-free_buf:
-	/* tx_req_bufsize = 0 retries mem alloc on next eth_start_xmit */
-	dev->tx_req_bufsize = 0;
-	list_for_each(act, &dev->tx_reqs) {
-		req = container_of(act, struct usb_request, list);
-		kfree(req->buf);
-	}
-	return -ENOMEM;
 }
 
 static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
@@ -667,11 +634,8 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	}
 
 	/* Allocate memory for tx_reqs to support multi packet transfer */
-	if (multi_pkt_xfer && !dev->tx_req_bufsize) {
-		retval = alloc_tx_buffer(dev);
-		if (retval < 0)
-			return -ENOMEM;
-	}
+	if (multi_pkt_xfer && !dev->tx_req_bufsize)
+		alloc_tx_buffer(dev);
 
 	/* apply outgoing CDC or RNDIS filters */
 	if (!is_promisc(cdc_filter)) {
@@ -839,18 +803,10 @@ static int eth_open(struct net_device *net)
 {
 	struct eth_dev	*dev = netdev_priv(net);
 	struct gether	*link;
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	int i;
-#endif
 
 	DBG(dev, "%s\n", __func__);
 	if (netif_carrier_ok(dev->net))
 		eth_start(dev, GFP_KERNEL);
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	dev->state = ETH_START;
-	for_each_online_cpu(i)
-		cpufreq_update_policy(i);
-#endif
 
 	spin_lock_irq(&dev->lock);
 	link = dev->port_usb;
@@ -865,10 +821,6 @@ static int eth_stop(struct net_device *net)
 {
 	struct eth_dev	*dev = netdev_priv(net);
 	unsigned long	flags;
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	int i;
-	enum ifc_state	prev_state;
-#endif
 
 	VDBG(dev, "%s\n", __func__);
 	netif_stop_queue(net);
@@ -895,9 +847,7 @@ static int eth_stop(struct net_device *net)
 		 * their own pace; the network stack can handle old packets.
 		 * For the moment we leave this here, since it works.
 		 */
-#ifndef CONFIG_USB_G_LGE_ANDROID_AUTORUN_VZW
 		usb_ep_disable(link->in_ep);
-#endif
 		usb_ep_disable(link->out_ep);
 		if (netif_carrier_ok(net)) {
 			if (config_ep_by_speed(dev->gadget, &link->func,
@@ -915,15 +865,6 @@ static int eth_stop(struct net_device *net)
 	}
 	spin_unlock_irqrestore(&dev->lock, flags);
 
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	prev_state = dev->state;
-	dev->state = ETH_STOP;
-
-	/* if previous state is eth_start, update cpufreq policy to normal */
-	if (prev_state == ETH_START)
-		for_each_online_cpu(i)
-			cpufreq_update_policy(i);
-#endif
 	return 0;
 }
 
@@ -987,40 +928,6 @@ static const struct net_device_ops eth_netdev_ops = {
 static struct device_type gadget_type = {
 	.name	= "gadget",
 };
-#ifdef CONFIG_USB_G_LGE_ANDROID
-static int gether_cpufreq_notifier_cb(struct notifier_block *nfb,
-		unsigned long event, void *data)
-{
-	struct cpufreq_policy *policy = data;
-	unsigned int cpu = policy->cpu;
-	struct eth_dev  *dev = container_of(nfb, struct eth_dev,
-			cpufreq_notifier);
-
-	if (!min_cpu_freq)
-		return NOTIFY_OK;
-
-	switch (event) {
-		case CPUFREQ_ADJUST:
-			pr_debug("%s: cpu:%u\n", __func__, cpu);
-
-			if (dev->state == ETH_START)
-				cpufreq_verify_within_limits(policy,
-						min_cpu_freq, UINT_MAX);
-
-			break;
-	}
-
-	return NOTIFY_OK;
-}
-
-static void update_cpu_policy_w(struct work_struct *work)
-{
-	int i;
-
-	for_each_online_cpu(i)
-		cpufreq_update_policy(i);
-}
-#endif
 
 /**
  * gether_setup - initialize one ethernet-over-usb link
@@ -1075,9 +982,6 @@ int gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
 	INIT_WORK(&dev->rx_work, process_rx_w);
 	INIT_LIST_HEAD(&dev->tx_reqs);
 	INIT_LIST_HEAD(&dev->rx_reqs);
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	INIT_WORK(&dev->cpu_policy_w, update_cpu_policy_w);
-#endif
 
 	skb_queue_head_init(&dev->rx_frames);
 
@@ -1100,11 +1004,6 @@ int gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
 	net->netdev_ops = &eth_netdev_ops;
 
 	SET_ETHTOOL_OPS(net, &ops);
-	/* two kinds of host-initiated state changes:
-	 *  - iff DATA transfer is active, carrier is "on"
-	 *  - tx queueing enabled if open *and* carrier is "on"
-	 */
-	netif_carrier_off(net);
 
 	dev->gadget = g;
 	SET_NETDEV_DEV(net, &g->dev);
@@ -1119,12 +1018,12 @@ int gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
 		INFO(dev, "HOST MAC %pM\n", dev->host_mac);
 
 		the_dev = dev;
-#ifdef CONFIG_USB_G_LGE_ANDROID
-		dev->cpufreq_notifier.notifier_call =
-			gether_cpufreq_notifier_cb;
-		cpufreq_register_notifier(&dev->cpufreq_notifier,
-				CPUFREQ_POLICY_NOTIFIER);
-#endif
+
+		/* two kinds of host-initiated state changes:
+		 *  - iff DATA transfer is active, carrier is "on"
+		 *  - tx queueing enabled if open *and* carrier is "on"
+		 */
+		netif_carrier_off(net);
 	}
 
 	return status;
@@ -1138,21 +1037,8 @@ int gether_setup_name(struct usb_gadget *g, u8 ethaddr[ETH_ALEN],
  */
 void gether_cleanup(void)
 {
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	int i;
-#endif
 	if (!the_dev)
 		return;
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	/* make sure cpu boost is set to normal again */
-	the_dev->state = ETH_UNDEFINED;
-	cancel_work_sync(&the_dev->cpu_policy_w);
-	for_each_online_cpu(i)
-		cpufreq_update_policy(i);
-
-	cpufreq_unregister_notifier(&the_dev->cpufreq_notifier,
-			CPUFREQ_POLICY_NOTIFIER);
-#endif
 
 	unregister_netdev(the_dev->net);
 	flush_work_sync(&the_dev->work);
@@ -1268,10 +1154,6 @@ void gether_disconnect(struct gether *link)
 
 	DBG(dev, "%s\n", __func__);
 
-#ifdef CONFIG_USB_G_LGE_ANDROID
-	dev->state = ETH_UNDEFINED;
-	queue_work(uether_wq, &dev->cpu_policy_w);
-#endif
 	netif_stop_queue(dev->net);
 	netif_carrier_off(dev->net);
 
@@ -1347,3 +1229,4 @@ static void __exit gether_exit(void)
 module_exit(gether_exit);
 MODULE_DESCRIPTION("ethernet over USB driver");
 MODULE_LICENSE("GPL v2");
+
