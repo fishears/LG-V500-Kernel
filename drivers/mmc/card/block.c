@@ -57,7 +57,7 @@ MODULE_ALIAS("mmc:block");
 #define INAND_CMD38_ARG_SECERASE 0x80
 #define INAND_CMD38_ARG_SECTRIM1 0x81
 #define INAND_CMD38_ARG_SECTRIM2 0x88
-#define MMC_BLK_TIMEOUT_MS  (30 * 1000)        /* 30 sec timeout */
+#define MMC_BLK_TIMEOUT_MS  (10 * 60 * 1000)        /* 10 minute timeout */
 
 #define MMC_SANITIZE_REQ_TIMEOUT 240000 /* msec */
 
@@ -488,7 +488,7 @@ static int mmc_blk_ioctl_cmd(struct block_device *bdev,
 	md = mmc_blk_get(bdev->bd_disk);
 	if (!md) {
 		err = -EINVAL;
-		goto blk_err;
+		goto cmd_done;
 	}
 
 	card = md->queue.card;
@@ -587,7 +587,6 @@ cmd_rel_host:
 
 cmd_done:
 	mmc_blk_put(md);
-blk_err:
 	kfree(idata->buf);
 	kfree(idata);
 	return err;
@@ -1053,7 +1052,7 @@ static int mmc_blk_issue_sanitize_rq(struct mmc_queue *mq,
 	pr_debug("%s: %s - SANITIZE IN PROGRESS...\n",
 		mmc_hostname(card->host), __func__);
 
-	err = mmc_switch_ignore_timeout(card, EXT_CSD_CMD_SET_NORMAL,
+	err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
 					EXT_CSD_SANITIZE_START, 1,
 					MMC_SANITIZE_REQ_TIMEOUT);
 
@@ -1074,59 +1073,15 @@ out:
 static int mmc_blk_issue_flush(struct mmc_queue *mq, struct request *req)
 {
 	struct mmc_blk_data *md = mq->data;
-	struct request_queue *q = mq->queue;
 	struct mmc_card *card = md->queue.card;
 	int ret = 0;
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-	int 	err=0;
-	static int timeout_count = 0;
-	static int reset_count = 0;
-#endif
 
 	ret = mmc_flush_cache(card);
-	if (ret == -ETIMEDOUT) {
-	/*             
-                                
-                                                                                                                                        
-                                                        
-  */
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-		if ((card->host->caps & MMC_CAP_NONREMOVABLE) && timeout_count > 3)		// Only for eMMC (NONREMOVABLE)
-		{
-			do
-			{
-				reset_count++;
-				err = mmc_blk_reset(md, card->host, 0);				// mmc_blk_reset() return zero if re-init is done successfully. do force reset.
-				pr_info("%s:%s: mmc_flush_cache() fails:%d:%d, call mmc_blk_reset() again:%d.\n",
-						mmc_hostname(card->host), __func__, ret, err, reset_count);
-			} while (err<0 && reset_count < 3);
-			if (err < 0)
-			{
-				pr_info("%s:%s: retry mmc_blk_reset() fails three times. abort it otherwise phone is hang:%d.\n",
-						mmc_hostname(card->host), __func__, err);
-				panic("eMMC is un-accessible");
-			}
-		}
-		timeout_count++;
-#endif /*                              */
-		pr_debug("%s:%s: requeue flush request after timeout\n", mmc_hostname(card->host), __func__);
-		spin_lock_irq(q->queue_lock);
-		blk_requeue_request(q, req);
-		spin_unlock_irq(q->queue_lock);
-		ret = 0;
-		goto exit;
-	} else if (ret) {
-		pr_err("%s: %s: notify flush error to upper layers\n", mmc_hostname(card->host), __func__);
+	if (ret)
 		ret = -EIO;
-	}
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-	else {
-		timeout_count = 0;
-		reset_count = 0;
-	}
-#endif
+
 	blk_end_request_all(req, ret);
-exit:
+
 	return ret ? 0 : 1;
 }
 
@@ -1940,9 +1895,6 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 	struct mmc_async_req *areq;
 	const u8 packed_num = 2;
 	u8 reqs = 0;
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-	int err = 0;
-#endif
 
 	if (!rqc && !mq->mqrq_prev->req)
 		return 0;
@@ -2071,9 +2023,6 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 	return 1;
 
  cmd_abort:
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-	err = -ERR_ABORT;
-#endif
 	if (mq_rq->packed_cmd == MMC_PACKED_NONE) {
 		if (mmc_card_removed(card))
 			req->cmd_flags |= REQ_QUIET;
@@ -2094,46 +2043,10 @@ static int mmc_blk_issue_rw_rq(struct mmc_queue *mq, struct request *rqc)
 
 		mmc_blk_rw_rq_prep(mq->mqrq_cur, card, 0, mq);
 		mmc_start_req(card->host, &mq->mqrq_cur->mmc_active, NULL);
-        }
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-	return (err != 0) ? err : 0;
-#else
-	return 0;
-#endif
-}
-
-/*             
-                               
-                                                                                                                                       
-                                                       
- */
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-static int mmc_blk_reset_if_hang(struct mmc_queue *mq, struct mmc_card *card)
-{
-	struct mmc_blk_data *md = mq->data;
-	int	err=0, reset_count =0;
-
-	// in case that eMMC failed to re-initialize, retry five times and crash if it is eMMC.
-	if (card->host->caps & MMC_CAP_NONREMOVABLE)		// Only for eMMC (NONREMOVABLE)
-	{
-		do
-		{
-			reset_count++;
-			err = mmc_blk_reset(md, card->host, 0);				// mmc_blk_reset() return zero if re-init is done successfully. do force reset.
-			pr_info("%s:%s: mmc_blk_issue_rw_rq() fail:%d, call mmc_blk_reset() again:%d.\n",
-					mmc_hostname(card->host), __func__,  err, reset_count);
-		} while (err<0 && reset_count < 3);
-		if (err < 0)
-		{
-			pr_info("%s:%s: retry mmc_blk_reset() fails three times. abort it otherwise phone is hang:%d.\n",
-					mmc_hostname(card->host), __func__, err);
-			panic("eMMC is un-accessible");
-		}
 	}
 
 	return 0;
 }
-#endif /*                              */
 
 static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 {
@@ -2169,45 +2082,24 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	if (req && req->cmd_flags & REQ_SANITIZE) {
 		/* complete ongoing async transfer before issuing sanitize */
 		if (card->host && card->host->areq)
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-			ret = mmc_blk_issue_rw_rq(mq, NULL);
-			if (ret == -ERR_ABORT)
-				mmc_blk_reset_if_hang(mq, card);
-#else
 			mmc_blk_issue_rw_rq(mq, NULL);
-#endif
 		ret = mmc_blk_issue_sanitize_rq(mq, req);
 	} else if (req && req->cmd_flags & REQ_DISCARD) {
 		/* complete ongoing async transfer before issuing discard */
 		if (card->host->areq)
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-			ret = mmc_blk_issue_rw_rq(mq, NULL);
-			if (ret == -ERR_ABORT)
-				mmc_blk_reset_if_hang(mq, card);
-#else
 			mmc_blk_issue_rw_rq(mq, NULL);
-#endif
-		if (req->cmd_flags & REQ_SECURE)
+		if (req->cmd_flags & REQ_SECURE &&
+			!(card->quirks & MMC_QUIRK_SEC_ERASE_TRIM_BROKEN))
 			ret = mmc_blk_issue_secdiscard_rq(mq, req);
 		else
 			ret = mmc_blk_issue_discard_rq(mq, req);
 	} else if (req && req->cmd_flags & REQ_FLUSH) {
 		/* complete ongoing async transfer before issuing flush */
 		if (card->host->areq)
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-			ret = mmc_blk_issue_rw_rq(mq, NULL);
-			if (ret == -ERR_ABORT)
-				mmc_blk_reset_if_hang(mq, card);
-#else
 			mmc_blk_issue_rw_rq(mq, NULL);
-#endif
 		ret = mmc_blk_issue_flush(mq, req);
 	} else {
 		ret = mmc_blk_issue_rw_rq(mq, req);
-#if defined (CONFIG_LGE_MMC_RESET_IF_HANG)
-		if (ret == -ERR_ABORT)
-			mmc_blk_reset_if_hang(mq, card);
-#endif
 	}
 
 out:
@@ -2538,6 +2430,7 @@ force_ro_fail:
 #define CID_MANFID_SANDISK	0x2
 #define CID_MANFID_TOSHIBA	0x11
 #define CID_MANFID_MICRON	0x13
+#define CID_MANFID_SAMSUNG	0x15
 
 static const struct mmc_fixup blk_fixups[] =
 {
@@ -2577,6 +2470,28 @@ static const struct mmc_fixup blk_fixups[] =
 	/* Some INAND MCP devices advertise incorrect timeout values */
 	MMC_FIXUP("SEM04G", 0x45, CID_OEMID_ANY, add_quirk_mmc,
 		  MMC_QUIRK_INAND_DATA_TIMEOUT),
+
+	/*
+	 * On these Samsung MoviNAND parts, performing secure erase or
+	 * secure trim can result in unrecoverable corruption due to a
+	 * firmware bug.
+	 */
+	MMC_FIXUP("M8G2FA", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+	MMC_FIXUP("MAG4FA", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+	MMC_FIXUP("MBG8FA", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+	MMC_FIXUP("MCGAFA", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+	MMC_FIXUP("VAL00M", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+	MMC_FIXUP("VYL00M", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+	MMC_FIXUP("KYL00M", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
+	MMC_FIXUP("VZL00M", CID_MANFID_SAMSUNG, CID_OEMID_ANY, add_quirk_mmc,
+		  MMC_QUIRK_SEC_ERASE_TRIM_BROKEN),
 
 	END_FIXUP
 };
@@ -2737,4 +2652,5 @@ module_exit(mmc_blk_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Multimedia Card (MMC) block device driver");
+
 
