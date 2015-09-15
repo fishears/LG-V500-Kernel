@@ -453,7 +453,6 @@ int le_user_confirm_reply(struct hci_conn *hcon, u16 mgmt_op, void *cp)
 		clear_bit(HCI_CONN_ENCRYPT_PEND, &hcon->pend);
 		mgmt_auth_failed(hcon->hdev->id, conn->dst, reason);
 		hci_conn_put(hcon);
-		l2cap_conn_del(hcon, EACCES, 0);
 	} else if (hcon->cfm_pending) {
 		BT_DBG("send_pairing_confirm");
 		ret = send_pairing_confirm(conn);
@@ -716,10 +715,6 @@ static u8 smp_cmd_security_req(struct l2cap_conn *conn, struct sk_buff *skb)
 invalid_key:
 	hcon->sec_req = FALSE;
 
-	/* Switch to Pairing Connection Parameters */
-	hci_le_conn_update(hcon, SMP_MIN_CONN_INTERVAL, SMP_MAX_CONN_INTERVAL,
-		SMP_MAX_CONN_LATENCY, SMP_SUPERVISION_TIMEOUT);
-
 	skb_pull(skb, sizeof(*rp));
 
 	memset(&cp, 0, sizeof(cp));
@@ -779,11 +774,6 @@ int smp_conn_security(struct l2cap_conn *conn, __u8 sec_level)
 
 	if (hcon->link_mode & HCI_LM_MASTER) {
 		struct smp_cmd_pairing cp;
-
-		/* Switch to Pairing Connection Parameters */
-		hci_le_conn_update(hcon, SMP_MIN_CONN_INTERVAL,
-			SMP_MAX_CONN_INTERVAL, SMP_MAX_CONN_LATENCY,
-			SMP_SUPERVISION_TIMEOUT);
 
 		build_pairing_cmd(conn, &cp, NULL, authreq);
 		hcon->preq[0] = SMP_CMD_PAIRING_REQ;
@@ -877,19 +867,6 @@ int smp_sig_channel(struct l2cap_conn *conn, struct sk_buff *skb)
 
 	hcon->smp_conn = conn;
 	skb_pull(skb, sizeof(code));
-
-	/*
-	 * The SMP context must be initialized for all other PDUs except
-	 * pairing and security requests. If we get any other PDU when
-	 * not initialized simply disconnect (done if this function
-	 * returns an error).
-	 */
-	if (code != SMP_CMD_PAIRING_REQ && code != SMP_CMD_SECURITY_REQ &&
-	    !conn->smp_chan) {
-		BT_ERR("Unexpected SMP command 0x%02x. Disconnecting.", code);
-		kfree_skb(skb);
-		return -ENOTSUPP;
-	}
 
 	switch (code) {
 	case SMP_CMD_PAIRING_REQ:
@@ -1098,6 +1075,4 @@ void smp_timeout(unsigned long arg)
 	clear_bit(HCI_CONN_ENCRYPT_PEND, &conn->hcon->pend);
 	mgmt_auth_failed(conn->hcon->hdev->id, conn->dst, SMP_UNSPECIFIED);
 	hci_conn_put(conn->hcon);
-	//delete the l2cap connection
-	l2cap_conn_del(conn->hcon, EACCES, 0);
 }
