@@ -1738,6 +1738,11 @@ static void hub_free_dev(struct usb_device *udev)
 		hcd->driver->free_dev(hcd, udev);
 }
 
+#if defined(CONFIG_MACH_APQ8064_OMEGAR_KR) || defined(CONFIG_MACH_APQ8064_ALTEV)
+static int modem_enumeration_check = 0;
+module_param(modem_enumeration_check, int, S_IRUGO | S_IWUSR);
+#endif
+
 /**
  * usb_disconnect - disconnect a device (usbcore-internal)
  * @pdev: pointer to device being disconnected
@@ -1766,6 +1771,18 @@ void usb_disconnect(struct usb_device **pdev)
 	usb_set_device_state(udev, USB_STATE_NOTATTACHED);
 	dev_info(&udev->dev, "USB disconnect, device number %d\n",
 			udev->devnum);
+
+#if defined(CONFIG_MACH_APQ8064_OMEGAR_KR) || defined(CONFIG_MACH_APQ8064_ALTEV)
+	modem_enumeration_check = 0;
+	printk("%s : set modem_enumeration_check to 0!\n", __func__);
+#endif
+
+#ifdef CONFIG_USB_OTG
+	if (udev->bus->hnp_support && udev->portnum == udev->bus->otg_port) {
+		cancel_delayed_work_sync(&udev->bus->hnp_polling);
+		udev->bus->hnp_support = 0;
+	}
+#endif
 
 	usb_lock_device(udev);
 
@@ -2041,13 +2058,12 @@ int usb_new_device(struct usb_device *udev)
 	/* Tell the world! */
 	announce_device(udev);
 
-	if (udev->serial)
-		add_device_randomness(udev->serial, strlen(udev->serial));
-	if (udev->product)
-		add_device_randomness(udev->product, strlen(udev->product));
-	if (udev->manufacturer)
-		add_device_randomness(udev->manufacturer,
-				      strlen(udev->manufacturer));
+#if defined(CONFIG_MACH_APQ8064_OMEGAR_KR) || defined(CONFIG_MACH_APQ8064_ALTEV)
+	if(udev->descriptor.idProduct == 0x9008)
+		modem_enumeration_check = 0x1;
+	else if(udev->descriptor.idProduct == 0x9048)
+		modem_enumeration_check = 0x3;
+#endif
 
 	device_enable_async_suspend(&udev->dev);
 
