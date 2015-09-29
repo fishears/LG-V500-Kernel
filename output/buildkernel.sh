@@ -1,7 +1,8 @@
 #!/bin/bash
-BASE_FISH_VER="Fishearskernel_v500_"
+BASE_FISH_VER="Custom_"
 VER="1.0.2"
 FISH_VER=$BASE_FISH_VER$VER
+ZIP_VER="Fishearskernel_v500_"$VER
 
 export LOCALVERSION="-"`echo $FISH_VER`
 export CROSS_COMPILE=./arm-eabi-4.8/bin/arm-eabi-
@@ -33,4 +34,4 @@ mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x80208000 --ramdisk_offset 0
 find $KERNEL_DIR -name "*.ko" -exec cp {} zipfile/system/lib/modules/ \;
 cp updater-scriptCUSTOM zipfile/META-INF/com/google/android/updater-script
 cd zipfile
-zip -r9 ../$FISH_VER'.zip' *
+zip -r9 ../$ZIP_VER'.zip' *
