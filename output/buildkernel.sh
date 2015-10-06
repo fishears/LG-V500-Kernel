@@ -2,7 +2,7 @@
 BASE_FISH_VER="Custom-"
 VER="1.0.0"
 FISH_VER=$BASE_FISH_VER$VER
-ZIP_VER="FishearsKernel_v500_"$VER
+ZIP_VER="FishearsCustom_v500_"$VER
 
 export LOCALVERSION="-"`echo $FISH_VER`
 export CROSS_COMPILE=./arm-eabi-4.8/bin/arm-eabi-
