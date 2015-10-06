@@ -1,8 +1,8 @@
 #!/bin/bash
-BASE_FISH_VER="StockPlus"
-VER=""
+BASE_FISH_VER="StockPlus-"
+VER="1.0.0"
 FISH_VER=$BASE_FISH_VER$VER
-ZIP_VER="FishearsStockPlus_v500"$VER
+ZIP_VER="FishearsStockPlus_v500_"$VER
 
 export LOCALVERSION="-"`echo $FISH_VER`
 export CROSS_COMPILE=./arm-eabi-4.8/bin/arm-eabi-
