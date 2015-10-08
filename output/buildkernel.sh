@@ -1,6 +1,6 @@
 #!/bin/bash
 BASE_FISH_VER="Custom-"
-VER="1.0.0"
+VER="BETA"
 FISH_VER=$BASE_FISH_VER$VER
 ZIP_VER="FishearsCustom_v500_"$VER
 
@@ -35,4 +35,5 @@ find $KERNEL_DIR -name "*.ko" -exec cp {} zipfile/system/lib/modules/ \;
 cp texfat.ko zipfile/system/lib/modules/
 cp updater-scriptCUSTOM zipfile/META-INF/com/google/android/updater-script
 cd zipfile
-zip -r9 ../$ZIP_VER'.zip' *
+NOW=$(date +'%d%m%y%H%M')
+zip -r9 ../$ZIP_VER'_'$NOW'.zip' *
