@@ -844,7 +844,9 @@ static void dbs_freq_increase(struct cpufreq_policy *p, unsigned int freq)
 
 static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
-	unsigned int load_at_max_freq = 0;	
+#if defined(CONFIG_LG_GRID_GOVERNOR)
+	unsigned int load_at_max_freq = 0;
+#endif	
 	unsigned int max_load;
 	/* Current load across this CPU */
 	unsigned int cur_load = 0;
