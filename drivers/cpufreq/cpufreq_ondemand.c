@@ -144,8 +144,6 @@ static struct dbs_tuners {
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
-	.adj_up_threshold = DEF_FREQUENCY_UP_THRESHOLD -
-			    DEF_FREQUENCY_DOWN_DIFFERENTIAL,
 #if defined(CONFIG_LG_GRID_GOVERNOR)
 	.middle_grid_step = DEF_MIDDLE_GRID_STEP,
 	.high_grid_step = DEF_HIGH_GRID_STEP,
@@ -812,6 +810,7 @@ static void dbs_freq_increase(struct cpufreq_policy *p, unsigned int freq)
 
 static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
+	unsigned int load_at_max_freq = 0;	
 	unsigned int max_load;
 	/* Current load across this CPU */
 	unsigned int cur_load = 0;
@@ -897,7 +896,12 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	if (touch && max_load < dbs_tuners_ins.touch_load &&
 	    max_load > dbs_tuners_ins.touch_load_threshold)
 		max_load = dbs_tuners_ins.touch_load;
-	
+#if defined(CONFIG_LG_GRID_GOVERNOR)
+/* calculate the scaled load across CPU */
+	load_at_max_freq = (cur_load * policy->cur)/policy->cpuinfo.max_freq;
+
+	cpufreq_notify_utilization(policy, load_at_max_freq);
+#endif
 	/* Check for frequency increase */
 	if (max_load > dbs_tuners_ins.up_threshold) {
 #if defined(CONFIG_LG_GRID_GOVERNOR)
@@ -1004,14 +1008,8 @@ static inline void dbs_timer_init(struct cpu_dbs_info_s *dbs_info)
 		delay -= jiffies % delay;
 
 	dbs_info->sample_type = DBS_NORMAL_SAMPLE;
-	mutex_lock(&dbs_info->timer_mutex);
-	if (delayed_work_pending(&dbs_info->work)) {
-		printk(KERN_WARNING "work is pending : cpu(%d)\n", dbs_info->cpu);
-		mutex_unlock(&dbs_info->timer_mutex);
-		return;
-	}
-	schedule_delayed_work_on(dbs_info->cpu, &dbs_info->work, delay);
-	mutex_unlock(&dbs_info->timer_mutex);
+	INIT_DELAYED_WORK_DEFERRABLE(&dbs_info->work, do_dbs_timer);
+	schedule_delayed_work_on(dbs_info->cpu, &dbs_info->work, delay);;
 }
 
 static inline void dbs_timer_exit(struct cpu_dbs_info_s *dbs_info)
