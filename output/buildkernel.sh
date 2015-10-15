@@ -1,6 +1,6 @@
 #!/bin/bash
 BASE_FISH_VER="StockPlus-"
-VER="1.0.1"
+VER="1.0.2"
 FISH_VER=$BASE_FISH_VER$VER
 ZIP_VER="FishearsStockPlus_v500_"$VER
 
