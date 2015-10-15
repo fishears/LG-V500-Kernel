@@ -27,12 +27,11 @@ make awifi-perf_defconfig
 make -j4
 
 cd $OUTPUT_DIR
-rm zImage zipfile/boot.img bootin.img
+rm zImage zipfile/boot.img bootin.img zipfile/system/lib/modules/*.ko
 cp $KERNEL_DIR'/arch/arm/boot/zImage' .
 mkbootimg --base 0 --pagesize 2048 --kernel_offset 0x80208000 --ramdisk_offset 0x82200000 --second_offset 0x81100000 --tags_offset 0x80200100 --cmdline 'console=ttyHSL0,115200,n8 user_debug=31 msm_rtb.filter=0x3F ehci-hcd.park=3 androidboot.hardware=awifi vmalloc=600M androidboot.bootdevice=msm_sdcc.1  androidboot.selinux=permissive' --kernel zImage --ramdisk ramdisk.cpio.gz -o bootin.img
 ./bump.py bootin.img zipfile/boot.img
 find $KERNEL_DIR -name "*.ko" -exec cp {} zipfile/system/lib/modules/ \;
-cp texfat.ko zipfile/system/lib/modules/
 cp updater-scriptSTOCKPLUS zipfile/META-INF/com/google/android/updater-script
 cd zipfile
 zip -r9 ../$ZIP_VER'.zip' *
