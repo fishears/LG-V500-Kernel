@@ -39,6 +39,12 @@
 #include "acpuclock-krait.h"
 #include "avs.h"
 
+#ifdef CONFIG_LOW_CPUCLOCKS
+#define FREQ_TABLE_SIZE			39
+#else
+#define FREQ_TABLE_SIZE			35
+#endif
+
 #ifdef CONFIG_LGE_PM_LOW_BATT_CHG
 #include <mach/board_lge.h>
 #endif
@@ -1008,7 +1014,7 @@ void acpuclk_set_vdd(unsigned int khz, int vdd_uv) {
 #endif
 
 #ifdef CONFIG_CPU_FREQ_MSM
-static struct cpufreq_frequency_table freq_table[NR_CPUS][35];
+static struct cpufreq_frequency_table freq_table[NR_CPUS][FREQ_TABLE_SIZE];
 
 static void __init cpufreq_table_init(void)
 {
