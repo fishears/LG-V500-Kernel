@@ -1,4 +1,5 @@
 /arm-eabi-4.8
+/linaro
 
 #
 # NOTE! Don't add files that are generated in specific

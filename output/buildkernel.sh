@@ -5,7 +5,7 @@ FISH_VER=$BASE_FISH_VER$VER
 ZIP_VER="FishearsCustom_v500_"$VER
 
 export LOCALVERSION="-"`echo $FISH_VER`
-export CROSS_COMPILE=./arm-eabi-4.8/bin/arm-eabi-
+export CROSS_COMPILE=./linaro/bin/arm-eabi-
 export ARCH=arm
 export SUBARCH=arm
 export KBUILD_BUILD_USER=fishears
