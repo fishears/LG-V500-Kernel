@@ -350,8 +350,8 @@ CHECK		= sparse
 CC		= $(srctree)/scripts/gcc-wrapper.py $(REAL_CC)
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
-		   -Wbitwise -Wno-return-void $(CF)
-KERNEL_FLAGS 	=  -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -marm -march=armv7-a -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad -funroll-loops -fgcse-las
+		  -Wbitwise -Wno-return-void $(CF)
+KERNEL_FLAGS 	=  -O3 -munaligned-access -fgcse-sm -fgcse-las -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad -funroll-loops -ftree-loop-im -ftree-loop-ivcanon -fmodulo-sched -fmodulo-sched-allow-regmoves -fivopts -fgraphite -floop-flatten -floop-parallelize-all -ftree-loop-linear -floop-interchange -floop-strip-mine -floop-block -floop-nest-optimize -frename-registers -std=gnu89 -fira-loop-pressure
 MOD_FLAGS 	= -DMODULE $(KERNEL_FLAGS)
 CFLAGS_MODULE 	= $(MODFLAGS)
 AFLAGS_MODULE 	= $(MODFLAGS)
