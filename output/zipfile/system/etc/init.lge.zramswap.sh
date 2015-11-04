@@ -83,8 +83,8 @@ start() {
   zramdev_num=0
   while [[ $zramdev_num -lt $nr_zramdev ]]; do
 # FISHEARS KERNEL TWEAK - fixed ZRAM of 175mb
-     echo $((175*1024*1024)) > /sys/block/zram0/disksize
-#    echo $sz_zram > /sys/block/zram${zramdev_num}/disksize
+#     echo $((175*1024*1024)) > /sys/block/zram0/disksize
+    echo $sz_zram > /sys/block/zram${zramdev_num}/disksize
     mkswap /dev/block/zram${zramdev_num} && (echo "mkswap ${zramdev_num}") || (echo "mkswap ${zramdev_num} failed and exiting(${?})" ; exit $?)
     swapon -p 5 /dev/block/zram${zramdev_num} && (echo "swapon ${zramdev_num}") || (echo "swapon ${zramdev_num} failed and exiting(${?})" ; exit $?)
     ((zramdev_num++))

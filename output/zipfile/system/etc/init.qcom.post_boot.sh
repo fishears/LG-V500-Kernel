@@ -432,19 +432,19 @@ case "$product" in
 		echo 500 > /sys/kernel/mm/ksm/sleep_millisecs
 		echo 1 > /sys/kernel/mm/ksm/run
 # VM-Tweaks
-		echo "4096" > /proc/sys/vm/min_free_kbytes;
-		echo "0" > /proc/sys/vm/oom_kill_allocating_task;
-		echo "0" > /proc/sys/vm/panic_on_oom;
-		echo "0" > /proc/sys/vm/laptop_mode;
-		echo "50" > /proc/sys/vm/vfs_cache_pressure;
-		echo "90" > /proc/sys/vm/dirty_ratio;
-		echo "1" > /proc/sys/vm/overcommit_memory;
-		echo "4" > /proc/sys/vm/min_free_order_shift;
-		echo "1" > /proc/sys/vm/oom_dump_tasks;
-		echo "1000" > /proc/sys/vm/dirty_writeback_centisecs;
-		echo "500" > /proc/sys/vm/dirty_expire_centisecs;
-		echo "8" > /proc/sys/vm/page-cluster;
-		echo "3" > /proc/sys/vm/drop_caches
+#		echo "4096" > /proc/sys/vm/min_free_kbytes;
+#		echo "0" > /proc/sys/vm/oom_kill_allocating_task;
+#		echo "0" > /proc/sys/vm/panic_on_oom;
+#		echo "0" > /proc/sys/vm/laptop_mode;
+#		echo "50" > /proc/sys/vm/vfs_cache_pressure;
+#		echo "90" > /proc/sys/vm/dirty_ratio;
+#		echo "1" > /proc/sys/vm/overcommit_memory;
+#		echo "4" > /proc/sys/vm/min_free_order_shift;
+#		echo "1" > /proc/sys/vm/oom_dump_tasks;
+#		echo "1000" > /proc/sys/vm/dirty_writeback_centisecs;
+#		echo "500" > /proc/sys/vm/dirty_expire_centisecs;
+#		echo "8" > /proc/sys/vm/page-cluster;
+#		echo "3" > /proc/sys/vm/drop_caches
 		echo "80" > /proc/sys/vm/swappiness
 # GPU Governor
 		echo "simple" > /sys/devices/platform/kgsl-3d0.0/kgsl/kgsl-3d0/pwrscale/trustzone/governor
