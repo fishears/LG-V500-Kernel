@@ -57,7 +57,6 @@ static inline void disable_cpufreq(void) { }
 #define CPUFREQ_POLICY_POWERSAVE	(1)
 #define CPUFREQ_POLICY_PERFORMANCE	(2)
 
-#define UTIL_THRESHOLD			(25)
 /* Minimum frequency cutoff to notify the userspace about cpu utilization
  * changes */
 #define MIN_CPU_UTIL_NOTIFY   40
@@ -86,7 +85,6 @@ struct cpufreq_cpuinfo {
 struct cpufreq_real_policy {
 	unsigned int		min;    /* in kHz */
 	unsigned int		max;    /* in kHz */
-	unsigned int		util_thres;
 	unsigned int		policy; /* see above */
 	struct cpufreq_governor	*governor; /* see below */
 };
@@ -104,7 +102,6 @@ struct cpufreq_policy {
 	unsigned int		cur;    /* in kHz, only needed if cpufreq
 					 * governors are used */
 	unsigned int            util;  /* CPU utilization at max frequency */
-	unsigned int		util_thres; /* Threshold to increase utilization*/
 	unsigned int		policy; /* see above */
 	struct cpufreq_governor	*governor; /* see below */
 
@@ -338,7 +335,6 @@ static inline unsigned int cpufreq_get(unsigned int cpu)
 #ifdef CONFIG_CPU_FREQ
 unsigned int cpufreq_quick_get(unsigned int cpu);
 unsigned int cpufreq_quick_get_max(unsigned int cpu);
-unsigned int cpufreq_quick_get_util(unsigned int cpu);
 #else
 static inline unsigned int cpufreq_quick_get(unsigned int cpu)
 {
