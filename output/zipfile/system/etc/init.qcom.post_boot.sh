@@ -445,6 +445,9 @@ case "$product" in
 #		echo "500" > /proc/sys/vm/dirty_expire_centisecs;
 #		echo "8" > /proc/sys/vm/page-cluster;
 #		echo "3" > /proc/sys/vm/drop_caches
+		echo "0,58,117,176,529,1000" > /sys/module/lowmemorykiller/parameters/adj
+		echo "32" > /sys/module/lowmemorykiller/parameters/cost
+		echo "18432,23040,27648,32256,36864,46080" > /sys/module/lowmemorykiller/parameters/minfree
 		echo "80" > /proc/sys/vm/swappiness
 # GPU Governor
 		echo "simple" > /sys/devices/platform/kgsl-3d0.0/kgsl/kgsl-3d0/pwrscale/trustzone/governor
