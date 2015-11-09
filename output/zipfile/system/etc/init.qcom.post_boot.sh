@@ -449,6 +449,8 @@ case "$product" in
 		echo "32" > /sys/module/lowmemorykiller/parameters/cost
 		echo "18432,23040,27648,32256,36864,46080" > /sys/module/lowmemorykiller/parameters/minfree
 		echo "80" > /proc/sys/vm/swappiness
+# IntelliThermal
+		echo "15" > /sys/module/msm_thermal/parameters/freq_control_mask #apply to for all cores
 # GPU Governor
 		echo "simple" > /sys/devices/platform/kgsl-3d0.0/kgsl/kgsl-3d0/pwrscale/trustzone/governor
      ;;
