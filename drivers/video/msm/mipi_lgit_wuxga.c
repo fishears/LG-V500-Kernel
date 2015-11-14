@@ -30,10 +30,10 @@ static struct dsi_buf lgit_tx_buf;
 static struct dsi_buf lgit_rx_buf;
 static struct dsi_buf lgit_camera_tx_buf;
 static struct dsi_buf lgit_shutdown_tx_buf;
-
+#if defined(CONFIG_LGE_BACKLIGHT_CABC)
 static int __init mipi_lgit_lcd_init(void);
 static bool lgit_lcd_cabc_state(void);
-
+#endif
 #if defined(CONFIG_LGIT_COLOR_ENGINE_SWITCH)
 static int is_color_engine_on = 1;
 struct msm_fb_data_type *local_mfd0 = NULL;
@@ -106,7 +106,9 @@ static int mipi_stable_lcd_on(struct platform_device *pdev)
 int mipi_lgit_lcd_on(struct platform_device *pdev)
 {
 	int cnt = 0;
+#if defined(CONFIG_LGE_BACKLIGHT_CABC)
 	bool cabc_off_state = 1;
+#endif
 	struct msm_fb_data_type *mfd;
 
 	if (check_stable_lcd_on)
@@ -280,8 +282,9 @@ static int mipi_lgit_lcd_probe(struct platform_device *pdev)
 #if defined(CONFIG_LGE_R63311_COLOR_ENGINE)
     int err;
 #endif
+#if defined(CONFIG_LGE_BACKLIGHT_CABC)
     int err;
-
+#endif
 	if (pdev->id == 0) {
 		mipi_lgit_pdata = pdev->dev.platform_data;
 		return 0;
