@@ -1462,25 +1462,25 @@ static struct msm_panel_common_pdata mipi_lgit_pdata_LD083WU1 = {
 	.power_off_set_2 = lgit_shutdown_set_LD083WU1,
 	.power_off_set_size_2 = ARRAY_SIZE(lgit_shutdown_set_LD083WU1),
 };
-
+#if defined(CONFIG_LGE_BACKLIGHT_CABC)
 static struct msm_panel_common_pdata mipi_lgit_pdata_LD083WU1_noCABC = {
 	.backlight_level = mipi_lgit_backlight_level,
 	.power_on_set_1 = lgit_power_on_set_1_LD083WU1,
 	.power_on_set_size_1 = ARRAY_SIZE(lgit_power_on_set_1_LD083WU1),
 	.power_on_set_2 = lgit_power_on_set_2_LD083WU1,
 	.power_on_set_size_2 = ARRAY_SIZE(lgit_power_on_set_2_LD083WU1),
-#if defined(CONFIG_LGE_BACKLIGHT_CABC)
+
 	.power_on_set_3 = lgit_power_on_set_3_LD083WU1_noCABC,
 	.power_on_set_size_3 = ARRAY_SIZE(lgit_power_on_set_3_LD083WU1_noCABC),
 	.power_on_set_3_noCABC = lgit_power_on_set_3_LD083WU1_noCABC,
 	.power_on_set_size_3_noCABC = ARRAY_SIZE(lgit_power_on_set_3_LD083WU1_noCABC),
-#endif
+
 	.power_off_set_1 = lgit_power_off_set_LD083WU1,
 	.power_off_set_size_1 = ARRAY_SIZE(lgit_power_off_set_LD083WU1),
 	.power_off_set_2 = lgit_shutdown_set_LD083WU1,
 	.power_off_set_size_2 = ARRAY_SIZE(lgit_shutdown_set_LD083WU1),
 };
-
+#endif
 
 static struct platform_device mipi_dsi_lgit_panel_device = {
 	.name = "mipi_lgit",
