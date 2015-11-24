@@ -427,10 +427,14 @@ case "$product" in
 		echo "$FREQMAX" > /sys/devices/system/cpu/cpu1/cpufreq/scaling_max_freq
 		echo "$FREQMAX" > /sys/devices/system/cpu/cpu2/cpufreq/scaling_max_freq
 		echo "$FREQMAX" > /sys/devices/system/cpu/cpu3/cpufreq/scaling_max_freq
-# Configure and enable KSM
-		echo 100 > /sys/kernel/mm/ksm/pages_to_scan
-		echo 500 > /sys/kernel/mm/ksm/sleep_millisecs
-		echo 1 > /sys/kernel/mm/ksm/run
+//# Configure and enable KSM
+//		echo 100 > /sys/kernel/mm/ksm/pages_to_scan
+//		echo 500 > /sys/kernel/mm/ksm/sleep_millisecs
+//		echo 1 > /sys/kernel/mm/ksm/run
+# Configure and enable UKSM
+		echo "1" > /sys/kernel/mm/uksm/run
+		echo "500" > /sys/kernel/mm/uksm/sleep_millisecs
+		echo "medium" > /sys/kernel/mm/uksm/cpu_governor
 # VM-Tweaks
 #		echo "4096" > /proc/sys/vm/min_free_kbytes;
 #		echo "0" > /proc/sys/vm/oom_kill_allocating_task;
