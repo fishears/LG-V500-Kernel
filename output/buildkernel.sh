@@ -1,6 +1,6 @@
 #!/bin/bash
 BASE_FISH_VER="Custom-"
-VER="1.0.6"
+VER="1.0.7"
 FISH_VER=$BASE_FISH_VER$VER
 ZIP_VER="FishearsCustom_v500_"$VER
 
