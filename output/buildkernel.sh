@@ -24,7 +24,7 @@ echo "OUTPUT_DIR="$OUTPUT_DIR
 #build kernel
 cd $KERNEL_DIR
 make awifi-perf_defconfig
-make -j4
+make -j8
 #make boot.img, bump, copy modules, and zip kernel
 cd $OUTPUT_DIR
 cp $KERNEL_DIR'/arch/arm/boot/zImage' .
