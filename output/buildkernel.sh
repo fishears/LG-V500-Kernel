@@ -1,6 +1,6 @@
 #!/bin/bash
-BASE_FISH_VER="FishearsStockPlus_v500_"
-VER="1.0.1"
+BASE_FISH_VER="REDUX_v500"
+VER=""
 FISH_VER=$BASE_FISH_VER$VER
 
 export LOCALVERSION="-"`echo $FISH_VER`
